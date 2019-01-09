@@ -36,7 +36,7 @@ return result;
 }
 
 
-float SeqIntPID(float Kp, float Ki, float Kd,  s16 GiveValue, u16 ActualValue)
+float SeqIntPID(float Kp, float Ki, float Kd,  u16 GiveValue, u16 ActualValue)
 {
 float result;
 float KpWork, KiWork, KdWork;

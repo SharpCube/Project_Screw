@@ -21,7 +21,6 @@
 #include "can.h"
 #include "delay.h"
 #include "step_time.h"
-#include "lcd.h"
 
 /**************************************************************************
 *                            全局变量                                     *
@@ -30,13 +29,17 @@
 static struct rt_messagequeue mq;
 static char msg_pool[2048];
 
-static struct rt_event event;
-
 rt_uint16_t count=0;
 rt_uint16_t count1=0;
 rt_uint16_t count_1=0;
 rt_int16_t clock_position=0;
-rt_uint16_t mode=0;
+rt_uint16_t mode=4;
+
+rt_int16_t Desire_value = 0;
+rt_int16_t flag = 0;
+
+
+
 
 /**************************************************************************
 *                            线程入口                                     *
@@ -44,89 +47,158 @@ rt_uint16_t mode=0;
 
 void pid_thread_entry(void* parameter)
 {
-    while(1)
-    {
-        count = TIM4->CNT;
-		count1 = TIM8->CNT;
-		count_1=count-count1;
-		count_1=(count_1+4096)%4096;
+	 while(1)
+	 {
+			 count = TIM4->CNT;
+			 count1 = TIM8->CNT;
+		   rt_enter_critical();
+			 count_1=count-count1;
+			 count_1=(count_1+4096)%4096;
+		   rt_exit_critical();
+		  // rt_kprintf("%d,%d\r\n",count,count1);
+		    // rt_kprintf("%d\r\n",count_1);
 		 
-		ResultValue =SeqIntPID(4, 0,50,-1000,count);		
-		if(ResultValue>1800)
-            ResultValue=1800;
-				
-		else if (ResultValue<-1800)
-			ResultValue=-1800; 
+			 ResultValue =SeqIntPID(4, 0,50,Desire_value,count_1);		
+			 if(ResultValue>1800)
+					 ResultValue=1800;
+			 else if (ResultValue<-1800)
+					 ResultValue=-1800; 
 
-		CAN_RoboModule_DRV_Current_Velocity_Mode(0,1,6000,ResultValue);
-		rt_thread_delay(4);
-    
-    }
+			 CAN_RoboModule_DRV_Current_Velocity_Mode(0,1,6000,ResultValue);
+			 rt_thread_delay(4);
+	}
 }
 	
 void strategy_thread_entry(void* parameter)
 {
 	while(1)
-        rt_thread_delay(20);
+	{
+	  count = TIM4->CNT;
+		count1 = TIM8->CNT;
+		count_1=count-count1;
+		count_1=(count_1+4096)%4096;
+		if(mode == 0)
+		{
+			Desire_value = 0;
+		}
+		else if(mode == 1)
+		{
+			Desire_value = -500;
+		}
+		else
+		{
+			if(flag == 0)
+			{
+				//if(count_1 > 0 && count_1< 100)
+				//{
+				    Desire_value = 160;
+				//}
+			  if(count_1 < 2048 && count_1 > 100)
+			  {
+				    Desire_value = 0;   //覆盖问题
+					  rt_thread_delay(50);
+				    flag = 1;
+			  }
+			}
+			if(flag == 1)
+			{
+				//if(count_1 > 0 && count_1 < 150)   //这个地方会有BUG 
+				//{
+				    Desire_value = 200;    //值传回覆盖问题
+				//}
+			  if(count_1 < 2048 && count_1 > 150)
+			  {
+				    Desire_value = 0;
+					  rt_thread_delay(1000);
+					  mode = 1;
+					  flag = 0;
+			  }
+			}
+		}
+	}
+		rt_thread_delay(20);
 }
 	
 void key_thread_entry(void* parameter)
 {
-    rt_uint8_t key;
+		rt_uint8_t key;
     while(1)
     {
-        key=KEY_Scan(0);
+			key=KEY_Scan(0);
 			
-		if(key == KEY0_PRES)           
+			if(key == KEY0_PRES)
 			{
 				mode=1;
-				printf("KEY0_PRES\r\n");
 			}	
 			
-		else if(key == KEY1_PRES)
-			 {	
-				 mode=2;
-				 printf("KEY1_PRES\r\n");
-			 }		
+			else if(key == KEY1_PRES)
+			{	
+				mode=2;
+			}		
 			
-		else if(key == WKUP_PRES)
-			 { 	
-				 mode=0;
-				 printf("KEY2_PRES\r\n");
-			 }
-             
-		rt_thread_delay(10);   
-    }			 
+			else if(key == WKUP_PRES)
+			{	
+				mode=0;
+			}	
+			
+			else
+			{
+			  mode = 4;
+			}
+			
+			rt_thread_delay(10);
+   }
 }
 
 void stepmotor_thread_entry(void* parameter)
 {
-	rt_uint8_t key;
+	//rt_uint8_t key;
 	while(1)
-	{	
-		if(key==1)
+	{
+		//key=KEY_Scan(0);			  
+		if(mode == 1)
 		{		 
-			LED0_DIR=0;
-			Pulse_output(1000,800);//1KHZ,8000???
+			 LED0_DIR=0;
+			 Pulse_output(1000,800);//1KHZ,8000???
 		}
-		else if(key==2)	
+		else if(mode == 2)	
 		{
-			LED0_DIR=1;
-			Pulse_output(1000,800);
+			 LED0_DIR=1;
+			 Pulse_output(1000,800);
 		}
-		else if(key==3)	
+		else if(mode == 0)	
 		{
-			while(KEY_Scan(0) != 4)
+			while(mode != 2)
 			{
-				LED0_DIR=0;
-				Pulse_output(300,12000);//3.3KHZ,12000
-				delay_ms(8000);
-				LED0_DIR=1;
-				Pulse_output(300,12000);//3.3KHZ,12000
-				delay_ms(8000);
+				 Desire_value = 360;
+				 LED0_DIR=0;
+				 Pulse_output(265,11000);//3.3KHZ,12000
+				 //count = TIM4->CNT;
+		     //count1 = TIM8->CNT;
+
+				 while(count_1 < 140 || (count_1 > 2048&&count_1<4096))
+				 {//rt_kprintf("q%d\r\n",count_1);
+				 rt_thread_delay(1);
+				 }
+				 Desire_value = 0;
+				 rt_thread_delay(100);
+         Desire_value = 380;
+				 while(count_1 < 320 || (count_1 > 2048&&count_1<4096))
+				 {//rt_kprintf("w%d\r\n",count_1);
+				 rt_thread_delay(1);
+					 }
+				 Desire_value = 0;
+				 rt_thread_delay(2000);				
+				 LED0_DIR=1;
+				 Desire_value = -500;
+				 Pulse_output(205,11000);//3.3KHZ,12000
+				 Desire_value = 0;
+				 rt_thread_delay(2000);
 			} 
+			mode = 4;
+			Desire_value = 0;
 		}			
-        rt_thread_delay(10);
+	  rt_thread_delay(10);
 	}
 }
 	
@@ -137,16 +209,6 @@ void display_thread_entry(void* parameter)
 	int count=100;
 	if((fd=open("/test/1.txt",O_WRONLY | O_CREAT))==-1)
         printf("open 1.txt error\n");
-    POINT_COLOR=RED; 
-	//LCD_ShowString(30,50,200,16,16,"Mcudev STM32F4");	
-	//LCD_ShowString(30,70,200,16,16,"PWM DAC TEST");	
-	LCD_ShowString(30,90,200,16,16,"rubber test platform");
-	//LCD_ShowString(30,110,200,16,16,"2014/5/6");	 
-	//LCD_ShowString(30,130,200,16,16,"WK_UP:+  KEY1:-");	 
-	POINT_COLOR=BLUE;//设置字体为蓝色      	 
-	//LCD_ShowString(30,150,200,16,16,"DAC VAL:");	      
-	LCD_ShowString(30,170,200,16,16,"count:    0");	      
-	LCD_ShowString(30,190,200,16,16,"file :1.txt");
 	
     while (count--)
     {
@@ -155,10 +217,11 @@ void display_thread_entry(void* parameter)
         if (rt_mq_recv(&mq, &buf[0], sizeof(buf), RT_WAITING_FOREVER)
                 == RT_EOK)
         {            
-            write(fd,buf,strlen(buf));  
-			rt_kprintf("content:%s\n", buf);
+          write(fd,buf,strlen(buf));  
+					rt_kprintf("content:%s\n", buf);
         }
-       
+
+        
         rt_thread_delay(1);
     }
 		close(fd);
@@ -166,27 +229,40 @@ void display_thread_entry(void* parameter)
 	
 void collect_thread_entry(void* parameter)
 {
-		int i, result;
-    char buf[] = "message No.x\r\n";
-		
+//		int i, result;
+//    char buf[] = "message No.x\r\n";
+//		
 
-    while (1)
-    {
-        for (i = 0; i < 10; i++)
-        {
-            buf[sizeof(buf) - 4] = '0' + i;
+//    while (1)
+//    {
+//        for (i = 0; i < 10; i++)
+//        {
+//            buf[sizeof(buf) - 4] = '0' + i;
 
-           // rt_kprintf("%s\n", buf);
-            result = rt_mq_send(&mq, &buf[0], sizeof(buf));
-            if ( result == -RT_EFULL)
-            {
-               
-               // rt_kprintf("message queue full, delay 1s\n");
-                rt_thread_delay(1000);
-            }
-						rt_thread_delay(10);
-        }       
-    }
+//           // rt_kprintf("%s\n", buf);
+//            result = rt_mq_send(&mq, &buf[0], sizeof(buf));
+//            if ( result == -RT_EFULL)
+//            {
+//               
+//               // rt_kprintf("message queue full, delay 1s\n");
+//                rt_thread_delay(1000);
+//            }
+//						rt_thread_delay(10);
+//        }       
+//    }
+     while(1)
+		 {
+			  if(Desire_value >= 0)
+				{
+			  if(count_1 > 2048)
+		    rt_kprintf("%d\r\n",(rt_int16_t)(count_1-4096));
+				else
+				rt_kprintf("%d\r\n",count_1);
+			  }
+				else
+				rt_kprintf("%d\r\n",0);
+			  rt_thread_delay(10);
+		 }
 }
 
 /**************************************************************************
@@ -255,7 +331,7 @@ int stepmotor_thread_init()
 
     tid = rt_thread_create("stepmotor",
         stepmotor_thread_entry, RT_NULL,
-        2048, 7, 20);
+        2048, 8, 20);
 
     if (tid != RT_NULL)
         rt_thread_startup(tid);
@@ -279,7 +355,7 @@ int strategy_thread_init()
 
     return 0;
 }
-INIT_APP_EXPORT(strategy_thread_init);
+//INIT_APP_EXPORT(strategy_thread_init);
 	
 
 int display_thread_init()
@@ -295,7 +371,7 @@ int display_thread_init()
 	
     return 0;
 }
-INIT_APP_EXPORT(display_thread_init);
+//INIT_APP_EXPORT(display_thread_init);
 
 /**************************************************************************
 *                            创建IPC对象                                  *
@@ -309,9 +385,6 @@ int messageq_simple_init()
         32 - sizeof(void*), /* 每个消息的大小是 128 - void* */
         sizeof(msg_pool),  /* 内存池的大小是msg_pool的大小 */
         RT_IPC_FLAG_FIFO); /* 如果有多个线程等待，按照FIFO的方法分配消息 */
-    
-    /* 初始化时间对象 */    
-    rt_event_init(&event, "event", RT_IPC_FLAG_FIFO);
 				
     return 0;
 }
@@ -327,8 +400,6 @@ int hardware_init()
 	 rt_hw_key_init();
 	
 	 encode_Init();
-	
-	 LCD_Init();    
 	
 	 CAN1_Configuration(); 
 	 
