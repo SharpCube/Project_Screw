@@ -17,7 +17,7 @@
 
 #define RTC_CLOCK_SOURCE_LSE
 
-void rt_hw_rtc_init(void);
+int rt_hw_rtc_init(void);
 
 #endif
 

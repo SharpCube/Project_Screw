@@ -21,13 +21,17 @@
 #include "can.h"
 #include "delay.h"
 #include "step_time.h"
+#include "drv_lcd.h" 
 
 /**************************************************************************
 *                            全局变量                                     *
 ***************************************************************************/
-
+/* 消息队列控制块 */
 static struct rt_messagequeue mq;
-static char msg_pool[2048];
+static char msg_pool[1048];
+/* 信号量控制块 */
+static struct rt_semaphore sem;
+static char* file_name;
 
 rt_uint16_t count=0;
 rt_uint16_t count1=0;
@@ -35,8 +39,37 @@ rt_uint16_t count_1=0;
 rt_int16_t clock_position=0;
 rt_uint16_t mode=4;
 
+
 rt_int16_t Desire_value = 0;
 rt_int16_t flag = 0;
+
+typedef struct{
+    u8 head;
+    u16 tick;
+    s16 deformation;
+    s16 current;
+    s16 ad_torque;   
+}Comdate;
+
+/**************************************************************************
+*                            创建交互函数                                 *
+***************************************************************************/
+void measure(int argc, char **argv)
+{	
+	 if (argc < 2)
+    {
+        rt_kprintf("Usage: measure file_name\n");
+        rt_kprintf("Like: measure 1.txt\n");
+        return ;
+    }
+	
+	file_name = argv[1];
+    mode = 0;
+    rt_sem_release(&sem);
+	
+}
+
+MSH_CMD_EXPORT(measure, measure); 
 
 
 
@@ -115,8 +148,9 @@ void strategy_thread_entry(void* parameter)
 			  }
 			}
 		}
+        rt_thread_delay(20);       
 	}
-		rt_thread_delay(20);
+		
 }
 	
 void key_thread_entry(void* parameter)
@@ -153,6 +187,7 @@ void key_thread_entry(void* parameter)
 void stepmotor_thread_entry(void* parameter)
 {
 	//rt_uint8_t key;
+    rt_uint16_t count = 0;
 	while(1)
 	{
 		//key=KEY_Scan(0);			  
@@ -168,35 +203,30 @@ void stepmotor_thread_entry(void* parameter)
 		}
 		else if(mode == 0)	
 		{
-			while(mode != 2)
+			while(count == 1000&&mode != 2)
 			{
-				 Desire_value = 360;
-				 LED0_DIR=0;
-				 Pulse_output(265,11000);//3.3KHZ,12000
-				 //count = TIM4->CNT;
-		     //count1 = TIM8->CNT;
-
-				 while(count_1 < 140 || (count_1 > 2048&&count_1<4096))
-				 {//rt_kprintf("q%d\r\n",count_1);
-				 rt_thread_delay(1);
-				 }
-				 Desire_value = 0;
-				 rt_thread_delay(100);
-         Desire_value = 380;
-				 while(count_1 < 320 || (count_1 > 2048&&count_1<4096))
-				 {//rt_kprintf("w%d\r\n",count_1);
-				 rt_thread_delay(1);
-					 }
-				 Desire_value = 0;
-				 rt_thread_delay(2000);				
-				 LED0_DIR=1;
-				 Desire_value = -500;
-				 Pulse_output(205,11000);//3.3KHZ,12000
-				 Desire_value = 0;
-				 rt_thread_delay(2000);
+				count++;
+                Desire_value = 360;
+				LED0_DIR=0;
+				Pulse_output(265,11000);//3.3KHZ,12000
+				while(count_1 < 140 || (count_1 > 2048&&count_1<4096))
+				rt_thread_delay(1);
+				Desire_value = 0;
+				rt_thread_delay(100);
+                Desire_value = 380;
+				while(count_1 < 320 || (count_1 > 2048&&count_1<4096))
+				rt_thread_delay(1);
+				Desire_value = -1;
+				rt_thread_delay(2000);				
+				LED0_DIR=1;
+				Desire_value = -500;
+				Pulse_output(205,11000);//3.3KHZ,12000
+				Desire_value = -1;
+				rt_thread_delay(2000);
 			} 
 			mode = 4;
 			Desire_value = 0;
+            count = 0;
 		}			
 	  rt_thread_delay(10);
 	}
@@ -204,24 +234,28 @@ void stepmotor_thread_entry(void* parameter)
 	
 void display_thread_entry(void* parameter)
 {
-	char buf[32];
+    Comdate comdate;
 	int fd;
-	int count=100;
-	if((fd=open("/test/1.txt",O_WRONLY | O_CREAT))==-1)
-        printf("open 1.txt error\n");
+    	LCD_ShowString(30,90,200,16,16,"rubber test");
+ 
+	POINT_COLOR=BLUE;//设置字体为蓝色      	 
+	LCD_ShowString(30,150,200,16,16,"file:");
+    LCD_ShowString(94,150,200,16,16,file_name);    
+	LCD_ShowString(30,170,200,16,16,"count:");
+    rt_sem_take(&sem, RT_WAITING_FOREVER);
+	if((fd=open(file_name,O_WRONLY | O_CREAT))==-1)
+        printf("open %s error\r\n",file_name);	      
 	
-    while (count--)
-    {
-        rt_memset(&buf[0], 0, sizeof(buf));
-       
-        if (rt_mq_recv(&mq, &buf[0], sizeof(buf), RT_WAITING_FOREVER)
+    while (count != 1000)
+    {      
+        LCD_ShowxNum(94,170,count,1,16,0);
+        if (rt_mq_recv(&mq, &comdate, sizeof(comdate), RT_WAITING_FOREVER)
                 == RT_EOK)
         {            
-          write(fd,buf,strlen(buf));  
-					rt_kprintf("content:%s\n", buf);
+          write(fd,&comdate,sizeof(comdate));  
+					//rt_kprintf("content:%s\n", buf);
         }
-
-        
+       
         rt_thread_delay(1);
     }
 		close(fd);
@@ -229,40 +263,25 @@ void display_thread_entry(void* parameter)
 	
 void collect_thread_entry(void* parameter)
 {
-//		int i, result;
-//    char buf[] = "message No.x\r\n";
-//		
-
-//    while (1)
-//    {
-//        for (i = 0; i < 10; i++)
-//        {
-//            buf[sizeof(buf) - 4] = '0' + i;
-
-//           // rt_kprintf("%s\n", buf);
-//            result = rt_mq_send(&mq, &buf[0], sizeof(buf));
-//            if ( result == -RT_EFULL)
-//            {
-//               
-//               // rt_kprintf("message queue full, delay 1s\n");
-//                rt_thread_delay(1000);
-//            }
-//						rt_thread_delay(10);
-//        }       
-//    }
-     while(1)
-		 {
-			  if(Desire_value >= 0)
-				{
-			  if(count_1 > 2048)
-		    rt_kprintf("%d\r\n",(rt_int16_t)(count_1-4096));
-				else
-				rt_kprintf("%d\r\n",count_1);
-			  }
-				else
-				rt_kprintf("%d\r\n",0);
-			  rt_thread_delay(10);
-		 }
+    Comdate comdate;
+    int result;
+       
+    comdate.head=0x55;
+    while (1)
+    {
+        if(Desire_value > 0) {            
+            comdate.tick = rt_tick_get();
+            comdate.deformation = count_1;        
+            comdate.current = Real_Current_Value[0];
+            comdate.ad_torque = 0;       
+            result = rt_mq_send(&mq, &comdate, sizeof(comdate));
+            if ( result == -RT_EFULL) {               
+                rt_kprintf("message queue full, delay 1s\n");
+                rt_thread_delay(1000);
+            }
+        }
+		rt_thread_delay(10);           
+    }   
 }
 
 /**************************************************************************
@@ -304,14 +323,6 @@ INIT_APP_EXPORT(collect_thread_init);
 int pid_thread_init()
 {
 	rt_thread_t tid;
-	
-	 /* 初始化消息队列 */
-    rt_mq_init(&mq, "mqt", 
-        &msg_pool[0], /* 内存池指向msg_pool */
-        128 - sizeof(void*), /* 每个消息的大小是 128 - void* */
-        sizeof(msg_pool),  /* 内存池的大小是msg_pool的大小 */
-        RT_IPC_FLAG_FIFO); /* 如果有多个线程等待，按照FIFO的方法分配消息 */
-
 
     tid = rt_thread_create("pid",
         pid_thread_entry, RT_NULL,
@@ -371,7 +382,7 @@ int display_thread_init()
 	
     return 0;
 }
-//INIT_APP_EXPORT(display_thread_init);
+INIT_APP_EXPORT(display_thread_init);
 
 /**************************************************************************
 *                            创建IPC对象                                  *
@@ -381,10 +392,16 @@ int messageq_simple_init()
 {
     /* 初始化消息队列 */
     rt_mq_init(&mq, "mqt", 
-        &msg_pool[0], /* 内存池指向msg_pool */
-        32 - sizeof(void*), /* 每个消息的大小是 128 - void* */
-        sizeof(msg_pool),  /* 内存池的大小是msg_pool的大小 */
-        RT_IPC_FLAG_FIFO); /* 如果有多个线程等待，按照FIFO的方法分配消息 */
+    &msg_pool[0], /* 内存池指向msg_pool */
+    13 - sizeof(void*), /* 每个消息的大小是 128 - void* */
+    sizeof(msg_pool),  /* 内存池的大小是msg_pool的大小 */
+    RT_IPC_FLAG_FIFO); /* 如果有多个线程等待，按照FIFO的方法分配消息 */
+    
+
+        /* 初始化信号量，初始值是0 */
+    rt_sem_init(&sem, "sem", 0, 
+               RT_IPC_FLAG_FIFO);
+             
 				
     return 0;
 }
@@ -402,6 +419,8 @@ int hardware_init()
 	 encode_Init();
 	
 	 CAN1_Configuration(); 
+    POINT_COLOR=RED; 
+
 	 
 	 delay_ms(500);                                      //发送复位指令后的延时必须要有，等待驱动器再次初始化完成
 	 CAN_RoboModule_DRV_Reset(0,1);
@@ -414,6 +433,8 @@ int hardware_init()
 	 return 0;
 }
 INIT_DEVICE_EXPORT(hardware_init);
+
+
 
 	
 	

@@ -455,11 +455,6 @@
               <FilePath>.\hardware\key.c</FilePath>
             </File>
             <File>
-              <FileName>lcd.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\hardware\lcd.c</FilePath>
-            </File>
-            <File>
               <FileName>led.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\hardware\led.c</FilePath>
@@ -495,29 +490,24 @@
               <FilePath>drivers\usart.c</FilePath>
             </File>
             <File>
-              <FileName>stm32f4_rtc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>drivers\stm32f4_rtc.c</FilePath>
-            </File>
-            <File>
               <FileName>sdcard.c</FileName>
               <FileType>1</FileType>
               <FilePath>drivers\sdcard.c</FilePath>
             </File>
             <File>
-              <FileName>drv_spi.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>drivers\drv_spi.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv_i2c.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>drivers\drv_i2c.c</FilePath>
-            </File>
-            <File>
               <FileName>gpio.c</FileName>
               <FileType>1</FileType>
               <FilePath>drivers\gpio.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_lcd.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\drivers\drv_lcd.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4_rtc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\drivers\stm32f4_rtc.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -19,7 +19,7 @@ extern float OverIntErrBack;
 
 
 float PID(float Kp, float Ki, float Kd, float GiveValue, float ActualValue);
-float SeqIntPID(float Kp, float Ki, float Kd, s16 GiveValue, u16 ActualValue);//积分分离
+float SeqIntPID(float Kp, float Ki, float Kd, u16 GiveValue, u16 ActualValue);//积分分离
 float OverIntPID(float Kp, float Ki, float Kd, float GiveValue, float ActualValue);//抗饱和积分
 
 

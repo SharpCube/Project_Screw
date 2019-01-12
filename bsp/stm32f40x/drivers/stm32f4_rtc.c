@@ -190,7 +190,7 @@ int RTC_Configuration(void)
 	return 0;
 }
 
-void rt_hw_rtc_init(void)
+int rt_hw_rtc_init(void)
 {
     rtc.type	= RT_Device_Class_RTC;
 
@@ -201,7 +201,7 @@ void rt_hw_rtc_init(void)
         if ( RTC_Configuration() != 0)
         {
             rt_kprintf("rtc configure fail...\r\n");
-            return ;
+            return 0;
         }
     }
     else
@@ -223,10 +223,10 @@ void rt_hw_rtc_init(void)
 
     rt_device_register(&rtc, "rtc", RT_DEVICE_FLAG_RDWR);
 
-    return;
+    return 0;
 }
 
-//INIT_BOARD_EXPORT(rt_hw_rtc_init);
+INIT_BOARD_EXPORT(rt_hw_rtc_init);
 
 #ifdef RT_USING_FINSH
 #include "finsh.h"

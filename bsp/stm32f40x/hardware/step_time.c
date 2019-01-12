@@ -1,4 +1,5 @@
 #include "step_time.h"
+#include <rtthread.h>
 
 //TIM1和TIM8~TIM11使用APB2时钟频率168M,TIM2~TIM7和TIM12~TIM14使用APB1时钟频率为84M
 
@@ -84,7 +85,8 @@ void Pulse_output(u32 Cycle,u32 PulseNum)
     
     TIM_Cmd(TIM1, ENABLE);
     TIM_CtrlPWMOutputs(TIM1, ENABLE);
-    while(!pulse_test);
+    while(!pulse_test)
+    rt_thread_delay(1);
 		pulse_test = 0;
 }
 
